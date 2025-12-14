@@ -30,9 +30,10 @@ async function navigateToUrl(browser, url) {
   let response = null;
 
   try {
+    // First, wait for page to load (faster, more reliable than networkidle)
     response = await page.goto(url, {
-      waitUntil: "networkidle",
-      timeout: 30000, // 30 second timeout
+      waitUntil: "load", // Changed from "networkidle" to "load" for better reliability
+      timeout: 60000, // Increased to 60 second timeout
     });
 
     // Get status code from response
@@ -45,6 +46,19 @@ async function navigateToUrl(browser, url) {
         throw new Error(`HTTP ${statusCode}: ${statusText}`);
       }
     }
+
+    // Optionally wait for network to be idle (with shorter timeout)
+    // This helps capture dynamic content but won't wait forever
+    try {
+      await Promise.race([
+        page.waitForLoadState("networkidle"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000))
+      ]);
+      console.log("[BROWSER] Network idle state reached");
+    } catch (idleError) {
+      console.log("[BROWSER] Network idle timeout - continuing with loaded page");
+      // Continue anyway - page is loaded
+    }
   } catch (error) {
     // If we have a response with error status, use it
     if (response && response.status() >= 400) {
@@ -56,7 +70,7 @@ async function navigateToUrl(browser, url) {
   }
 
   // Wait a bit more for any animations or dynamic content to render
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(2000); // Increased to 2 seconds
   
   // Wait for page to be fully ready
   await page.evaluate(() => {

@@ -1,6 +1,7 @@
 const fs = require("fs").promises;
 const path = require("path");
 const crypto = require("crypto");
+const { loadImage } = require("canvas");
 
 /**
  * Ensures the screenshots directory exists
@@ -46,12 +47,19 @@ async function captureScreenshot(page, url) {
   await fs.writeFile(filepath, screenshotBuffer);
   console.log(`[SCREENSHOT] Screenshot saved: ${filename} (${(screenshotBuffer.length / 1024).toFixed(2)} KB)`);
 
+  // Get image dimensions from buffer
+  const img = await loadImage(screenshotBuffer);
+  const width = img.width;
+  const height = img.height;
+
   // Return relative URL - frontend should prepend backend URL
   return {
     buffer: screenshotBuffer, // Keep buffer for annotation
     base64: screenshotBase64,
     filename: filename,
     url: `/screenshots/${filename}`, // Relative path - use with backend base URL
+    width: width,
+    height: height,
   };
 }
 

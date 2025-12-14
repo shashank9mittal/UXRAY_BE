@@ -6,6 +6,8 @@ node_modules/
 .env.local
 .env.*.local
 
+# Note: Create a .env file with OPENAI_API_KEY=your_key_here for Vision AI
+
 # Logs
 logs
 *.log

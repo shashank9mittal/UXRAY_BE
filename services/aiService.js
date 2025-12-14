@@ -1,15 +1,49 @@
+const visionAIService = require("./visionAIService");
+
 /**
- * Mock AI service that returns mock analysis data
- * This will be replaced with actual AI integration later
+ * B4.2: AI service that uses live Vision AI or falls back to mock
  * @param {string} url - URL that was analyzed
  * @param {string} screenshotBase64 - Base64 encoded screenshot
  * @param {Array} navigationElements - Array of navigation elements
- * @returns {Promise<Object>} Mock AI analysis results
+ * @param {number} imageWidth - Screenshot width
+ * @param {number} imageHeight - Screenshot height
+ * @returns {Promise<Object>} AI analysis results
  */
-async function analyzeWithAI(url, screenshotBase64, navigationElements) {
-  console.log("[AI] Running mock AI analysis...");
+async function analyzeWithAI(url, screenshotBase64, navigationElements, imageWidth, imageHeight) {
+  // B4.2: Use live Vision AI if API key is available, otherwise fall back to mock
+  const useLiveAI = !!process.env.OPENAI_API_KEY;
 
-  // Simulate AI processing delay
+  if (useLiveAI) {
+    console.log("[AI] B4.2: Using live Vision AI analysis...");
+    try {
+      const visionResult = await visionAIService.analyzeWithVisionAI(
+        screenshotBase64,
+        imageWidth,
+        imageHeight
+      );
+
+      // Transform vision AI response to match expected format
+      return {
+        coordinates: visionResult.report.map((issue) => ({
+          x: issue.coordinates.x,
+          y: issue.coordinates.y,
+          width: issue.coordinates.width,
+          height: issue.coordinates.height,
+          label: issue.message,
+          confidence: issue.severity === "critical" ? 0.95 : issue.severity === "warning" ? 0.8 : 0.6,
+        })),
+        report: visionResult.report,
+        timestamp: visionResult.timestamp,
+        model: visionResult.model,
+      };
+    } catch (error) {
+      console.error("[AI] Vision AI failed, falling back to mock:", error.message);
+      // Fall through to mock data
+    }
+  }
+
+  // Fallback to mock data
+  console.log("[AI] Using mock AI analysis (no OPENAI_API_KEY or Vision AI failed)...");
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   // Mock coordinates (representing detected UI elements or regions of interest)

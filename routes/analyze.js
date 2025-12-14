@@ -59,8 +59,19 @@ router.post("/", async (req, res) => {
     await browserService.closeBrowser(browser);
     browser = null;
 
-    // Run mock AI analysis (using base64 for AI processing)
-    const aiAnalysis = await aiService.analyzeWithAI(url, screenshot.base64, navigationElements);
+    // B4.2: Run live Vision AI analysis (or fallback to mock)
+    // Get image dimensions from screenshot
+    const imageWidth = screenshot.width || pageInfo.dimensions?.width || 1280;
+    const imageHeight = screenshot.height || pageInfo.dimensions?.height || 720;
+    
+    console.log(`[ANALYZE] B4.2: Analyzing screenshot (${imageWidth}x${imageHeight}px) with Vision AI...`);
+    const aiAnalysis = await aiService.analyzeWithAI(
+      url,
+      screenshot.base64,
+      navigationElements,
+      imageWidth,
+      imageHeight
+    );
 
     // Create annotated screenshot (Phase 3: with bounding boxes and issue ID badges)
     const annotatedScreenshot = await annotationService.annotateScreenshot(
