@@ -40,35 +40,63 @@ async function analyzeWithAI(url, screenshotBase64, navigationElements) {
     },
   ];
 
-  // Mock report array (representing AI-generated insights)
+  // Mock report array (representing AI-generated insights with coordinates and IDs)
   const mockReport = [
     {
+      id: 1,
       type: "accessibility",
       severity: "warning",
       message: "Some images are missing alt text",
       element: "img",
       recommendation: "Add descriptive alt attributes to all images",
+      coordinates: {
+        x: 100,
+        y: 150,
+        width: 200,
+        height: 50,
+      },
     },
     {
+      id: 2,
       type: "performance",
       severity: "info",
       message: "Page load time is acceptable",
       metric: "loadTime",
       value: "2.3s",
+      coordinates: {
+        x: 50,
+        y: 300,
+        width: 300,
+        height: 100,
+      },
     },
     {
+      id: 3,
       type: "ux",
       severity: "suggestion",
       message: "Consider adding more visual hierarchy",
       area: "main-content",
       recommendation: "Use larger headings and better spacing",
+      coordinates: {
+        x: 400,
+        y: 100,
+        width: 150,
+        height: 400,
+      },
     },
     {
+      id: 4,
       type: "seo",
       severity: "warning",
       message: "Meta description could be improved",
       element: "meta",
       recommendation: "Add a more descriptive meta description",
+      coordinates: {
+        x: 200,
+        y: 50,
+        width: 400,
+        height: 30,
+      },
     },
   ];
 

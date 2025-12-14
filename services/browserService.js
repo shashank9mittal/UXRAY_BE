@@ -55,6 +55,20 @@ async function navigateToUrl(browser, url) {
     throw error;
   }
 
+  // Wait a bit more for any animations or dynamic content to render
+  await page.waitForTimeout(1000);
+  
+  // Wait for page to be fully ready
+  await page.evaluate(() => {
+    return new Promise((resolve) => {
+      if (document.readyState === "complete") {
+        resolve();
+      } else {
+        window.addEventListener("load", resolve);
+      }
+    });
+  });
+
   const loadTime = Date.now() - startTime;
   console.log(`[BROWSER] Page loaded in ${loadTime}ms with status ${statusCode}`);
 

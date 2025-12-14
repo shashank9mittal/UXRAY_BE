@@ -10,6 +10,7 @@ const metaService = require("../services/metaService");
 const pageInfoService = require("../services/pageInfoService");
 const navigationService = require("../services/navigationService");
 const aiService = require("../services/aiService");
+const annotationService = require("../services/annotationService");
 
 // Utils
 const { validateUrl } = require("../utils/urlValidator");
@@ -61,7 +62,23 @@ router.post("/", async (req, res) => {
     // Run mock AI analysis (using base64 for AI processing)
     const aiAnalysis = await aiService.analyzeWithAI(url, screenshot.base64, navigationElements);
 
+    // Create annotated screenshot (Phase 3: with bounding boxes and issue ID badges)
+    const annotatedScreenshot = await annotationService.annotateScreenshot(
+      screenshot.buffer,
+      aiAnalysis.coordinates,
+      navigationElements,
+      aiAnalysis.report, // Pass report with coordinates and IDs
+      screenshot.filename
+    );
+
     // Build response (return URL instead of base64 to avoid 431 error)
+    // Get base URL for full screenshot URL
+    const protocol = req.protocol;
+    const host = req.get("host");
+    const baseUrl = `${protocol}://${host}`;
+    const fullScreenshotUrl = `${baseUrl}${screenshot.url}`;
+    const fullAnnotatedScreenshotUrl = `${baseUrl}${annotatedScreenshot.url}`;
+
     const analysisResult = {
       message: "Analysis completed successfully",
       url: url,
@@ -75,10 +92,18 @@ router.post("/", async (req, res) => {
       accessibility: accessibilityData,
       meta: metaInfo,
       navigation: navigationElements,
-      screenshot: screenshot.url, // Return URL as string for easy frontend usage
+      screenshot: fullAnnotatedScreenshotUrl, // Return annotated screenshot by default
       screenshotInfo: {
-        filename: screenshot.filename,
-        url: screenshot.url,
+        original: {
+          filename: screenshot.filename,
+          url: screenshot.url,
+          fullUrl: fullScreenshotUrl,
+        },
+        annotated: {
+          filename: annotatedScreenshot.filename,
+          url: annotatedScreenshot.url,
+          fullUrl: fullAnnotatedScreenshotUrl,
+        },
       },
       aiAnalysis: {
         coordinates: aiAnalysis.coordinates,
