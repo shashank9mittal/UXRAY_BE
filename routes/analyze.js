@@ -8,6 +8,8 @@ const performanceService = require("../services/performanceService");
 const accessibilityService = require("../services/accessibilityService");
 const metaService = require("../services/metaService");
 const pageInfoService = require("../services/pageInfoService");
+const navigationService = require("../services/navigationService");
+const aiService = require("../services/aiService");
 
 // Utils
 const { validateUrl } = require("../utils/urlValidator");
@@ -33,27 +35,38 @@ router.post("/", async (req, res) => {
 
     // Launch browser and navigate
     browser = await browserService.launchBrowser();
-    const { page, loadTime } = await browserService.navigateToUrl(browser, url);
+    const { page, loadTime, statusCode } = await browserService.navigateToUrl(browser, url);
 
     // Collect all analysis data in parallel where possible
-    const [pageInfo, screenshot, performanceMetrics, accessibilityData, metaInfo] =
-      await Promise.all([
-        pageInfoService.getPageInfo(page),
-        screenshotService.captureScreenshot(page),
-        performanceService.getPerformanceMetrics(page),
-        accessibilityService.checkAccessibility(page),
-        metaService.getMetaInfo(page),
-      ]);
+    const [
+      pageInfo,
+      screenshot,
+      performanceMetrics,
+      accessibilityData,
+      metaInfo,
+      navigationElements,
+    ] = await Promise.all([
+      pageInfoService.getPageInfo(page),
+      screenshotService.captureScreenshot(page, url),
+      performanceService.getPerformanceMetrics(page),
+      accessibilityService.checkAccessibility(page),
+      metaService.getMetaInfo(page),
+      navigationService.getNavigationElements(page),
+    ]);
 
     // Close browser
     await browserService.closeBrowser(browser);
     browser = null;
 
-    // Build response
+    // Run mock AI analysis (using base64 for AI processing)
+    const aiAnalysis = await aiService.analyzeWithAI(url, screenshot.base64, navigationElements);
+
+    // Build response (return URL instead of base64 to avoid 431 error)
     const analysisResult = {
       message: "Analysis completed successfully",
       url: url,
       status: "success",
+      statusCode: statusCode,
       pageInfo: {
         ...pageInfo,
         loadTime: loadTime,
@@ -61,7 +74,17 @@ router.post("/", async (req, res) => {
       performance: performanceMetrics,
       accessibility: accessibilityData,
       meta: metaInfo,
-      screenshot: screenshot,
+      navigation: navigationElements,
+      screenshot: screenshot.url, // Return URL as string for easy frontend usage
+      screenshotInfo: {
+        filename: screenshot.filename,
+        url: screenshot.url,
+      },
+      aiAnalysis: {
+        coordinates: aiAnalysis.coordinates,
+        report: aiAnalysis.report,
+        timestamp: aiAnalysis.timestamp,
+      },
     };
 
     console.log(`[ANALYZE] Analysis completed for: ${url}`);
