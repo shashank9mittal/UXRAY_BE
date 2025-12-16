@@ -8,6 +8,9 @@ const performanceService = require("../services/performanceService");
 const accessibilityService = require("../services/accessibilityService");
 const metaService = require("../services/metaService");
 const pageInfoService = require("../services/pageInfoService");
+const navigationService = require("../services/navigationService");
+const aiService = require("../services/aiService");
+const annotationService = require("../services/annotationService");
 
 // Utils
 const { validateUrl } = require("../utils/urlValidator");
@@ -33,27 +36,65 @@ router.post("/", async (req, res) => {
 
     // Launch browser and navigate
     browser = await browserService.launchBrowser();
-    const { page, loadTime } = await browserService.navigateToUrl(browser, url);
+    const { page, loadTime, statusCode } = await browserService.navigateToUrl(browser, url);
 
     // Collect all analysis data in parallel where possible
-    const [pageInfo, screenshot, performanceMetrics, accessibilityData, metaInfo] =
-      await Promise.all([
-        pageInfoService.getPageInfo(page),
-        screenshotService.captureScreenshot(page),
-        performanceService.getPerformanceMetrics(page),
-        accessibilityService.checkAccessibility(page),
-        metaService.getMetaInfo(page),
-      ]);
+    const [
+      pageInfo,
+      screenshot,
+      performanceMetrics,
+      accessibilityData,
+      metaInfo,
+      navigationElements,
+    ] = await Promise.all([
+      pageInfoService.getPageInfo(page),
+      screenshotService.captureScreenshot(page, url),
+      performanceService.getPerformanceMetrics(page),
+      accessibilityService.checkAccessibility(page),
+      metaService.getMetaInfo(page),
+      navigationService.getNavigationElements(page),
+    ]);
 
     // Close browser
     await browserService.closeBrowser(browser);
     browser = null;
 
-    // Build response
+    // B4.2: Run live Vision AI analysis (or fallback to mock)
+    // Get image dimensions from screenshot
+    const imageWidth = screenshot.width || pageInfo.dimensions?.width || 1280;
+    const imageHeight = screenshot.height || pageInfo.dimensions?.height || 720;
+    
+    console.log(`[ANALYZE] B4.2: Analyzing screenshot (${imageWidth}x${imageHeight}px) with Vision AI...`);
+    const aiAnalysis = await aiService.analyzeWithAI(
+      url,
+      screenshot.base64,
+      navigationElements,
+      imageWidth,
+      imageHeight
+    );
+
+    // Create annotated screenshot (Phase 3: with bounding boxes and issue ID badges)
+    const annotatedScreenshot = await annotationService.annotateScreenshot(
+      screenshot.buffer,
+      aiAnalysis.coordinates,
+      navigationElements,
+      aiAnalysis.report, // Pass report with coordinates and IDs
+      screenshot.filename
+    );
+
+    // Build response (return URL instead of base64 to avoid 431 error)
+    // Get base URL for full screenshot URL
+    const protocol = req.protocol;
+    const host = req.get("host");
+    const baseUrl = `${protocol}://${host}`;
+    const fullScreenshotUrl = `${baseUrl}${screenshot.url}`;
+    const fullAnnotatedScreenshotUrl = `${baseUrl}${annotatedScreenshot.url}`;
+
     const analysisResult = {
       message: "Analysis completed successfully",
       url: url,
       status: "success",
+      statusCode: statusCode,
       pageInfo: {
         ...pageInfo,
         loadTime: loadTime,
@@ -61,7 +102,25 @@ router.post("/", async (req, res) => {
       performance: performanceMetrics,
       accessibility: accessibilityData,
       meta: metaInfo,
-      screenshot: screenshot,
+      navigation: navigationElements,
+      screenshot: fullAnnotatedScreenshotUrl, // Return annotated screenshot by default
+      screenshotInfo: {
+        original: {
+          filename: screenshot.filename,
+          url: screenshot.url,
+          fullUrl: fullScreenshotUrl,
+        },
+        annotated: {
+          filename: annotatedScreenshot.filename,
+          url: annotatedScreenshot.url,
+          fullUrl: fullAnnotatedScreenshotUrl,
+        },
+      },
+      aiAnalysis: {
+        coordinates: aiAnalysis.coordinates,
+        report: aiAnalysis.report,
+        timestamp: aiAnalysis.timestamp,
+      },
     };
 
     console.log(`[ANALYZE] Analysis completed for: ${url}`);
