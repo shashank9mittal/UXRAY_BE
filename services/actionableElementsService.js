@@ -20,7 +20,7 @@ async function getActionableElements(page, options = {}) {
   console.log("[ACTIONABLE] Extracting actionable elements from DOM...");
 
   // Get viewport dimensions for location filtering
-  const viewport = page.viewportSize() || { width: 1280, height: 720 };
+  const viewport = page.viewportSize || { width: 1280, height: 720 };
 
   // 1. Find all actionable elements using Playwright locators
   const [
@@ -376,6 +376,10 @@ function exportToSheets(elements) {
     },
     locationScore: element.locationScore || 0,
     selector: element.selector || null,
+    // Include action suggestion if available
+    actionSuggestion: element.actionSuggestion || null,
+    // Include context if available
+    context: element.context || null,
   }));
 }
 

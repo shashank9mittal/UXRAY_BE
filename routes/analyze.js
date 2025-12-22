@@ -4,6 +4,7 @@ const router = express.Router();
 // Services
 const browserService = require("../services/browserService");
 const navigationService = require("../services/navigationService");
+const actionSuggestionService = require("../services/actionSuggestionService");
 
 // Utils
 const { validateUrl } = require("../utils/urlValidator");
@@ -39,7 +40,7 @@ router.get("/actionable-elements", async (req, res) => {
 
     // Get actionable elements
     const actionableElements = await navigationService.getAllActionableElements(page);
-    const sheetsData = await navigationService.exportActionableElementsToSheets(page);
+    const sheetsData = await navigationService.exportActionableElementsToSheets(actionableElements);
 
     // Close browser
     await browserService.closeBrowser(browser);
@@ -92,23 +93,32 @@ router.post("/", async (req, res) => {
 
     // Get actionable elements with all filtering applied
     const actionableElements = await navigationService.getAllActionableElements(page);
-    const sheetsData = await navigationService.exportActionableElementsToSheets(page);
+    
+    // Get action suggestions from AI (enriches elements with context and suggestions)
+    const actionableElementsWithSuggestions = await actionSuggestionService.getActionSuggestions(
+      page,
+      actionableElements
+    );
+    
+    const sheetsData = await navigationService.exportActionableElementsToSheets(
+      actionableElementsWithSuggestions
+    );
 
     // Close browser
     await browserService.closeBrowser(browser);
     browser = null;
 
-    // Return simple response with actionable elements
+    // Return simple response with actionable elements (now includes action suggestions)
     const analysisResult = {
       message: "Actionable elements extracted successfully",
       url: url,
       status: "success",
-      count: actionableElements.length,
-      elements: actionableElements,
+      count: actionableElementsWithSuggestions.length,
+      elements: actionableElementsWithSuggestions, // Now includes actionSuggestion and context
       sheetsExport: sheetsData,
     };
 
-    console.log(`[ANALYZE] Found ${actionableElements.length} actionable elements for: ${url}`);
+    console.log(`[ANALYZE] Found ${actionableElementsWithSuggestions.length} actionable elements with AI suggestions for: ${url}`);
     res.json(analysisResult);
   } catch (error) {
     console.error(`[ANALYZE] Error occurred: ${error.message}`);

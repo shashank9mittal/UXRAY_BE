@@ -7,7 +7,7 @@ async function getPageInfo(page) {
   const pageTitle = await page.title();
   console.log(`[PAGE_INFO] Page title: ${pageTitle}`);
 
-  const viewportSize = page.viewportSize();
+  const viewportSize = page.viewportSize;
   const pageDimensions = await page.evaluate(() => {
     return {
       width: document.documentElement.scrollWidth,

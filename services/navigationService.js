@@ -51,11 +51,10 @@ async function getAllActionableElements(page) {
 
 /**
  * Export actionable elements to sheets format
- * @param {Page} page - Playwright page instance
- * @returns {Promise<Array>} Structured data ready for export
+ * @param {Array} elements - Array of actionable elements
+ * @returns {Array} Structured data ready for export
  */
-async function exportActionableElementsToSheets(page) {
-  const elements = await actionableElementsService.getActionableElements(page);
+function exportActionableElementsToSheets(elements) {
   return actionableElementsService.exportToSheets(elements);
 }
 
