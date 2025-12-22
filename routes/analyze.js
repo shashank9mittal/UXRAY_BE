@@ -3,20 +3,72 @@ const router = express.Router();
 
 // Services
 const browserService = require("../services/browserService");
-const screenshotService = require("../services/screenshotService");
-const performanceService = require("../services/performanceService");
-const accessibilityService = require("../services/accessibilityService");
-const metaService = require("../services/metaService");
-const pageInfoService = require("../services/pageInfoService");
 const navigationService = require("../services/navigationService");
-const aiService = require("../services/aiService");
-const annotationService = require("../services/annotationService");
 
 // Utils
 const { validateUrl } = require("../utils/urlValidator");
 const { handleError } = require("../utils/errorHandler");
 
-// Analyze route
+// Actionable elements route (GET) - Must be before POST route to avoid 404
+router.get("/actionable-elements", async (req, res) => {
+  let browser = null;
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).json({
+        error: "Missing URL parameter",
+        message: "Please provide a URL query parameter",
+      });
+    }
+
+    console.log(`[ACTIONABLE] Received request for URL: ${url}`);
+
+    // Validate URL
+    const validation = validateUrl(url);
+    if (!validation.isValid) {
+      return res.status(validation.error.status).json({
+        error: validation.error.message,
+        message: validation.error.details,
+      });
+    }
+
+    // Launch browser and navigate
+    browser = await browserService.launchBrowser();
+    const { page } = await browserService.navigateToUrl(browser, url);
+
+    // Get actionable elements
+    const actionableElements = await navigationService.getAllActionableElements(page);
+    const sheetsData = await navigationService.exportActionableElementsToSheets(page);
+
+    // Close browser
+    await browserService.closeBrowser(browser);
+    browser = null;
+
+    res.json({
+      message: "Actionable elements extracted successfully",
+      url: url,
+      status: "success",
+      count: actionableElements.length,
+      elements: actionableElements,
+      sheetsExport: sheetsData, // Ready for export to Google Sheets, CSV, etc.
+    });
+  } catch (error) {
+    console.error(`[ACTIONABLE] Error occurred: ${error.message}`);
+
+    if (browser) {
+      await browserService.closeBrowser(browser).catch(() => {});
+    }
+
+    const errorResponse = handleError(error);
+    res.status(errorResponse.status).json({
+      error: errorResponse.error,
+      message: errorResponse.message,
+    });
+  }
+});
+
+// Analyze route (POST) - Simplified to only detect actionable elements
 router.post("/", async (req, res) => {
   let browser = null;
   try {
@@ -36,94 +88,27 @@ router.post("/", async (req, res) => {
 
     // Launch browser and navigate
     browser = await browserService.launchBrowser();
-    const { page, loadTime, statusCode } = await browserService.navigateToUrl(browser, url);
+    const { page } = await browserService.navigateToUrl(browser, url);
 
-    // Collect all analysis data in parallel where possible
-    const [
-      pageInfo,
-      screenshot,
-      performanceMetrics,
-      accessibilityData,
-      metaInfo,
-      navigationElements,
-    ] = await Promise.all([
-      pageInfoService.getPageInfo(page),
-      screenshotService.captureScreenshot(page, url),
-      performanceService.getPerformanceMetrics(page),
-      accessibilityService.checkAccessibility(page),
-      metaService.getMetaInfo(page),
-      navigationService.getNavigationElements(page),
-    ]);
+    // Get actionable elements with all filtering applied
+    const actionableElements = await navigationService.getAllActionableElements(page);
+    const sheetsData = await navigationService.exportActionableElementsToSheets(page);
 
     // Close browser
     await browserService.closeBrowser(browser);
     browser = null;
 
-    // B4.2: Run live Vision AI analysis (or fallback to mock)
-    // Get image dimensions from screenshot
-    const imageWidth = screenshot.width || pageInfo.dimensions?.width || 1280;
-    const imageHeight = screenshot.height || pageInfo.dimensions?.height || 720;
-    
-    console.log(`[ANALYZE] B4.2: Analyzing screenshot (${imageWidth}x${imageHeight}px) with Vision AI...`);
-    const aiAnalysis = await aiService.analyzeWithAI(
-      url,
-      screenshot.base64,
-      navigationElements,
-      imageWidth,
-      imageHeight
-    );
-
-    // Create annotated screenshot (Phase 3: with bounding boxes and issue ID badges)
-    const annotatedScreenshot = await annotationService.annotateScreenshot(
-      screenshot.buffer,
-      aiAnalysis.coordinates,
-      navigationElements,
-      aiAnalysis.report, // Pass report with coordinates and IDs
-      screenshot.filename
-    );
-
-    // Build response (return URL instead of base64 to avoid 431 error)
-    // Get base URL for full screenshot URL
-    const protocol = req.protocol;
-    const host = req.get("host");
-    const baseUrl = `${protocol}://${host}`;
-    const fullScreenshotUrl = `${baseUrl}${screenshot.url}`;
-    const fullAnnotatedScreenshotUrl = `${baseUrl}${annotatedScreenshot.url}`;
-
+    // Return simple response with actionable elements
     const analysisResult = {
-      message: "Analysis completed successfully",
+      message: "Actionable elements extracted successfully",
       url: url,
       status: "success",
-      statusCode: statusCode,
-      pageInfo: {
-        ...pageInfo,
-        loadTime: loadTime,
-      },
-      performance: performanceMetrics,
-      accessibility: accessibilityData,
-      meta: metaInfo,
-      navigation: navigationElements,
-      screenshot: fullAnnotatedScreenshotUrl, // Return annotated screenshot by default
-      screenshotInfo: {
-        original: {
-          filename: screenshot.filename,
-          url: screenshot.url,
-          fullUrl: fullScreenshotUrl,
-        },
-        annotated: {
-          filename: annotatedScreenshot.filename,
-          url: annotatedScreenshot.url,
-          fullUrl: fullAnnotatedScreenshotUrl,
-        },
-      },
-      aiAnalysis: {
-        coordinates: aiAnalysis.coordinates,
-        report: aiAnalysis.report,
-        timestamp: aiAnalysis.timestamp,
-      },
+      count: actionableElements.length,
+      elements: actionableElements,
+      sheetsExport: sheetsData,
     };
 
-    console.log(`[ANALYZE] Analysis completed for: ${url}`);
+    console.log(`[ANALYZE] Found ${actionableElements.length} actionable elements for: ${url}`);
     res.json(analysisResult);
   } catch (error) {
     console.error(`[ANALYZE] Error occurred: ${error.message}`);

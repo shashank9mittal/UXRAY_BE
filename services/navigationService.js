@@ -1,54 +1,68 @@
+const actionableElementsService = require('./actionableElementsService');
+
 /**
  * Extracts navigation elements (links and buttons) with their bounding boxes
+ * Enhanced version that uses comprehensive actionable elements detection
  * @param {Page} page - Playwright page instance
  * @returns {Promise<Array>} Array of navigation elements with text, bounding box, and URL
  */
 async function getNavigationElements(page) {
   console.log("[NAVIGATION] Extracting navigation elements...");
 
-  const navigationElements = await page.$$eval("a, button", (elements) => {
-    return elements.map((element) => {
-      const rect = element.getBoundingClientRect();
-      const tagName = element.tagName.toLowerCase();
-
-      // Get text content
-      let text = "";
-      if (tagName === "a") {
-        text = element.textContent?.trim() || element.getAttribute("aria-label") || "";
-      } else if (tagName === "button") {
-        text =
-          element.textContent?.trim() ||
-          element.getAttribute("aria-label") ||
-          element.getAttribute("value") ||
-          "";
-      }
-
-      // Get URL for links
-      let url = null;
-      if (tagName === "a") {
-        url = element.href || element.getAttribute("href") || null;
-      }
-
-      return {
-        type: tagName,
-        text: text,
-        url: url,
-        boundingBox: {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        },
-      };
-    });
+  // Use the comprehensive actionable elements service
+  const actionableElements = await actionableElementsService.getActionableElements(page, {
+    filterByVisibility: true,
+    filterBySemanticValue: true,
+    filterByLocation: true,
+    viewportPriority: true,
   });
+
+  // Transform to the expected format for backward compatibility
+  const navigationElements = actionableElements
+    .filter(el => el.category === 'link' || el.category === 'button')
+    .map(element => ({
+      type: element.tagName,
+      text: element.text || element.ariaLabel || '',
+      url: element.href || null,
+      boundingBox: element.boundingBox || {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+      },
+      // Additional metadata
+      category: element.category,
+      ariaLabel: element.ariaLabel,
+      locationScore: element.locationScore,
+    }));
 
   console.log(`[NAVIGATION] Found ${navigationElements.length} navigation elements`);
   return navigationElements;
 }
 
+/**
+ * Get all actionable elements (comprehensive)
+ * @param {Page} page - Playwright page instance
+ * @returns {Promise<Array>} All actionable elements with full metadata
+ */
+async function getAllActionableElements(page) {
+  return await actionableElementsService.getActionableElements(page);
+}
+
+/**
+ * Export actionable elements to sheets format
+ * @param {Page} page - Playwright page instance
+ * @returns {Promise<Array>} Structured data ready for export
+ */
+async function exportActionableElementsToSheets(page) {
+  const elements = await actionableElementsService.getActionableElements(page);
+  return actionableElementsService.exportToSheets(elements);
+}
+
 module.exports = {
   getNavigationElements,
+  getAllActionableElements,
+  exportActionableElementsToSheets,
 };
 
 
