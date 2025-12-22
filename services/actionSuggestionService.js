@@ -165,13 +165,17 @@ async function enrichElementsWithContext(page, elements) {
 /**
  * Gets action suggestions from LLM for a batch of elements
  * @param {Array} elements - Array of enriched actionable elements
+ * @param {Function} progressCallback - Optional progress callback (progress, message, metadata)
  * @returns {Promise<Array>} Elements with action suggestions
  */
-async function getActionSuggestionsFromLLM(elements) {
+async function getActionSuggestionsFromLLM(elements, progressCallback = null) {
   const useLiveAI = !!process.env.OPENAI_API_KEY;
 
   if (!useLiveAI) {
     console.log("[ACTION_SUGGESTION] No OPENAI_API_KEY, returning mock suggestions...");
+    if (progressCallback) {
+      progressCallback(100, 'Using mock suggestions (no API key)', { total: elements.length });
+    }
     return elements.map((el) => ({
       ...el,
       actionSuggestion: {
@@ -196,9 +200,24 @@ async function getActionSuggestionsFromLLM(elements) {
     console.log(`[ACTION_SUGGESTION] Processing ${batches.length} batches of elements...`);
 
     const results = [];
-    for (const batch of batches) {
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      
+      if (progressCallback) {
+        const batchProgress = 65 + Math.floor((i / batches.length) * 25); // 65-90%
+        progressCallback(
+          batchProgress,
+          `Processing AI suggestions: batch ${i + 1} of ${batches.length}...`,
+          { current: i + 1, total: batches.length, batchSize: batch.length }
+        );
+      }
+      
       const batchResults = await processBatch(client, batch);
       results.push(...batchResults);
+    }
+
+    if (progressCallback) {
+      progressCallback(90, 'AI suggestions completed', { total: results.length });
     }
 
     return results;
@@ -365,16 +384,24 @@ Return ONLY valid JSON object, no markdown, no code blocks, no explanations.`;
  * Main function to get action suggestions for actionable elements
  * @param {Page} page - Playwright page instance
  * @param {Array} elements - Array of actionable elements
+ * @param {Function} progressCallback - Optional progress callback (progress, message, metadata)
  * @returns {Promise<Array>} Elements with action suggestions
  */
-async function getActionSuggestions(page, elements) {
+async function getActionSuggestions(page, elements, progressCallback = null) {
   console.log(`[ACTION_SUGGESTION] Getting action suggestions for ${elements.length} elements...`);
 
   // Step 1: Enrich elements with context
+  if (progressCallback) {
+    progressCallback(55, 'Enriching elements with context...', { total: elements.length });
+  }
   const enrichedElements = await enrichElementsWithContext(page, elements);
 
+  if (progressCallback) {
+    progressCallback(60, 'Context enrichment completed', { total: enrichedElements.length });
+  }
+
   // Step 2: Get suggestions from LLM
-  const elementsWithSuggestions = await getActionSuggestionsFromLLM(enrichedElements);
+  const elementsWithSuggestions = await getActionSuggestionsFromLLM(enrichedElements, progressCallback);
 
   console.log(`[ACTION_SUGGESTION] Successfully added suggestions to ${elementsWithSuggestions.length} elements`);
   
