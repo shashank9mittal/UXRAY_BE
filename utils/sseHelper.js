@@ -72,11 +72,33 @@ function sendComplete(res, data) {
   res.end();
 }
 
+/**
+ * Sends a screenshot event
+ * @param {Response} res - Express response object
+ * @param {Object} screenshotData - Screenshot data with base64, filename, url, etc.
+ * @param {Object} executionData - Execution data (step, element, action, etc.)
+ */
+function sendScreenshot(res, screenshotData, executionData = {}) {
+  sendSSEEvent(res, 'screenshot', {
+    step: executionData.step || executionData.current || 0,
+    total: executionData.total || 0,
+    element: executionData.element || '',
+    action: executionData.action || '',
+    screenshot: {
+      filename: screenshotData.filename,
+      url: screenshotData.url,
+      base64: screenshotData.base64, // Base64 encoded image data
+    },
+    execution: executionData.execution || {},
+  });
+}
+
 module.exports = {
   setupSSE,
   sendSSEEvent,
   sendProgress,
   sendError,
   sendComplete,
+  sendScreenshot,
 };
 
