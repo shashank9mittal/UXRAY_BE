@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 
+// Services
+const browserService = require("../services/browserService");
+
 // Helper function to send SSE data
 const sendSSE = (res, event, data) => {
   res.write(`event: ${event}\n`);
@@ -8,10 +11,16 @@ const sendSSE = (res, event, data) => {
 };
 
 // Analyze route with Server-Sent Events
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
+  let browser = null;
+
   // Handle client disconnect
   req.on("close", () => {
     console.log(`[ANALYZE] Client disconnected for URL: ${req.body?.url || "unknown"}`);
+    // Clean up browser if client disconnects
+    if (browser) {
+      browserService.closeBrowser(browser).catch(() => {});
+    }
     if (!res.destroyed) {
       res.end();
     }
@@ -41,11 +50,42 @@ router.post("/", (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
+    // Launch browser and navigate to URL
+    sendSSE(res, "status", {
+      message: "Launching browser...",
+      timestamp: new Date().toISOString(),
+    });
+
+    browser = await browserService.launchBrowser();
+    
+    sendSSE(res, "status", {
+      message: "Navigating to URL...",
+      timestamp: new Date().toISOString(),
+    });
+
+    const { page, loadTime, statusCode } = await browserService.navigateToUrl(browser, url);
+
+    // Keep browser open for 5 seconds so user can see it
+    sendSSE(res, "status", {
+      message: "Browser opened - keeping open for 5 seconds...",
+      timestamp: new Date().toISOString(),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Close the page
+    await page.close();
+    
+    // Close the browser
+    await browserService.closeBrowser(browser);
+    browser = null;
+
     // Send the analysis result
     const response = {
       message: "Analysis completed successfully",
       url: url,
       status: "success",
+      loadTime: loadTime,
+      statusCode: statusCode,
       timestamp: new Date().toISOString(),
     };
 
@@ -69,6 +109,14 @@ router.post("/", (req, res) => {
     res.end();
   } catch (error) {
     console.error(`[ANALYZE] Error occurred: ${error.message}`);
+
+    // Clean up browser if it was opened
+    if (browser) {
+      await browserService.closeBrowser(browser).catch(() => {
+        console.log("[ANALYZE] Browser closed after error");
+      });
+      browser = null;
+    }
 
     // If headers haven't been sent, send regular error response
     if (!res.headersSent) {
