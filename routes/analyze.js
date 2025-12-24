@@ -151,7 +151,7 @@ router.post("/", async (req, res) => {
       page,
       actionableElementsWithSuggestions,
       {
-        maxActions: 200,
+        maxActions: 20,
         delayBetweenActions: 500,
         skipNavigation: false,
       },
