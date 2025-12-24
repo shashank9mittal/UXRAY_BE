@@ -35,9 +35,18 @@ const navigateToUrl = async (browser, url) => {
     console.log(`[BROWSER] Navigating to URL: ${url}`);
 
     const response = await page.goto(url, {
-      waitUntil: "networkidle", // Wait until network is idle
+      waitUntil: "networkidle", // Wait until network is idle (no network requests for at least 500ms)
       timeout: 30000, // 30 second timeout
     });
+
+    // Additional stabilization: wait for network to be idle for a bit longer
+    console.log(`[BROWSER] Waiting for page to stabilize...`);
+    try {
+      await page.waitForLoadState("networkidle", { timeout: 10000 });
+    } catch (e) {
+      // If networkidle times out, that's okay - page might have ongoing requests
+      console.log(`[BROWSER] Network idle wait completed or timed out`);
+    }
 
     const loadTime = Date.now() - startTime;
     const statusCode = response?.status() || 200;
