@@ -8,7 +8,7 @@ const launchBrowser = async () => {
   try {
     console.log("[BROWSER] Launching browser...");
     const browser = await chromium.launch({
-      headless: false, // Run in visible mode
+      headless: true, 
       slowMo: 100, // Slow down operations by 100ms to make it easier to see
     });
     console.log("[BROWSER] Browser launched successfully");

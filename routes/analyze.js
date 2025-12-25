@@ -5,90 +5,39 @@ const router = express.Router();
 const browserService = require("../services/browserService");
 const screenshotService = require("../services/screenshotService");
 
-// Helper function to send SSE data
-const sendSSE = (res, event, data) => {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-};
-
-// Analyze route with Server-Sent Events
-router.post("/", async (req, res) => {
+// Simple GET endpoint to analyze URL and return screenshot
+router.get("/", async (req, res) => {
   let browser = null;
 
-  // Handle client disconnect
-  req.on("close", () => {
-    console.log(`[ANALYZE] Client disconnected for URL: ${req.body?.url || "unknown"}`);
-    // Clean up browser if client disconnects
-    if (browser) {
-      browserService.closeBrowser(browser).catch(() => {});
-    }
-    if (!res.destroyed) {
-      res.end();
-    }
-  });
-
   try {
-    const { url } = req.body;
+    const { url } = req.query;
 
     if (!url) {
       return res.status(400).json({
         error: "URL is required",
-        message: "Please provide a URL in the request body",
+        message: "Please provide a URL as a query parameter (e.g., /analyze?url=https://example.com)",
       });
     }
 
     console.log(`[ANALYZE] Received request for URL: ${url}`);
 
-    // Set SSE headers
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-
-    // Send initial connection event
-    sendSSE(res, "connected", {
-      message: "Connection established",
-      timestamp: new Date().toISOString(),
-    });
-
-    // Launch browser and navigate to URL
-    sendSSE(res, "status", {
-      message: "Launching browser...",
-      timestamp: new Date().toISOString(),
-    });
-
+    // Launch browser
     browser = await browserService.launchBrowser();
-    
-    sendSSE(res, "status", {
-      message: "Navigating to URL...",
-      timestamp: new Date().toISOString(),
-    });
 
+    // Navigate to URL
     const { page, loadTime, statusCode } = await browserService.navigateToUrl(browser, url);
 
-    // Capture screenshot before closing the page
-    sendSSE(res, "status", {
-      message: "Capturing screenshot...",
-      timestamp: new Date().toISOString(),
-    });
-    
+    // Capture screenshot
     const screenshot = await screenshotService.captureScreenshot(page, url);
-
-    // Keep browser open for 5 seconds so user can see it
-    sendSSE(res, "status", {
-      message: "Browser opened - keeping open for 5 seconds...",
-      timestamp: new Date().toISOString(),
-    });
-    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     // Close the page
     await page.close();
-    
+
     // Close the browser
     await browserService.closeBrowser(browser);
     browser = null;
 
-    // Send the analysis result
+    // Send response with screenshot
     const response = {
       message: "Analysis completed successfully",
       url: url,
@@ -97,31 +46,18 @@ router.post("/", async (req, res) => {
       statusCode: statusCode,
       screenshot: {
         filename: screenshot.filename,
-        filepath: screenshot.filepath,
+        base64: screenshot.base64,
+        width: screenshot.width,
+        height: screenshot.height,
       },
       timestamp: new Date().toISOString(),
     };
 
     console.log(`[ANALYZE] Analysis completed for: ${url}`);
-    sendSSE(res, "analysis", response);
-
-    // Send completion event
-    sendSSE(res, "complete", {
-      message: "Analysis stream completed",
-      timestamp: new Date().toISOString(),
-    });
-
-    // Send end event to signal stream is ending
-    sendSSE(res, "end", {
-      message: "Stream ended",
-      timestamp: new Date().toISOString(),
-    });
-
-    // Close the connection
-    console.log(`[ANALYZE] Stream ended for: ${url}`);
-    res.end();
+    res.json(response);
   } catch (error) {
     console.error(`[ANALYZE] Error occurred: ${error.message}`);
+    console.error(error.stack);
 
     // Clean up browser if it was opened
     if (browser) {
@@ -131,28 +67,11 @@ router.post("/", async (req, res) => {
       browser = null;
     }
 
-    // If headers haven't been sent, send regular error response
-    if (!res.headersSent) {
-      return res.status(500).json({
-        error: "Internal server error",
-        message: error.message,
-      });
-    }
-
-    // Otherwise, send error as SSE event
-    sendSSE(res, "error", {
+    // Send error response
+    res.status(500).json({
       error: "Internal server error",
       message: error.message,
-      timestamp: new Date().toISOString(),
     });
-
-    // Send end event even on error
-    sendSSE(res, "end", {
-      message: "Stream ended due to error",
-      timestamp: new Date().toISOString(),
-    });
-
-    res.end();
   }
 });
 
