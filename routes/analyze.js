@@ -3,6 +3,7 @@ const router = express.Router();
 
 // Services
 const browserService = require("../services/browserService");
+const screenshotService = require("../services/screenshotService");
 
 // Helper function to send SSE data
 const sendSSE = (res, event, data) => {
@@ -65,6 +66,14 @@ router.post("/", async (req, res) => {
 
     const { page, loadTime, statusCode } = await browserService.navigateToUrl(browser, url);
 
+    // Capture screenshot before closing the page
+    sendSSE(res, "status", {
+      message: "Capturing screenshot...",
+      timestamp: new Date().toISOString(),
+    });
+    
+    const screenshot = await screenshotService.captureScreenshot(page, url);
+
     // Keep browser open for 5 seconds so user can see it
     sendSSE(res, "status", {
       message: "Browser opened - keeping open for 5 seconds...",
@@ -86,6 +95,10 @@ router.post("/", async (req, res) => {
       status: "success",
       loadTime: loadTime,
       statusCode: statusCode,
+      screenshot: {
+        filename: screenshot.filename,
+        filepath: screenshot.filepath,
+      },
       timestamp: new Date().toISOString(),
     };
 

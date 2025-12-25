@@ -31,6 +31,12 @@ const navigateToUrl = async (browser, url) => {
     console.log(`[BROWSER] Creating new page...`);
     page = await browser.newPage();
 
+    // Set high-resolution viewport for better screenshots
+    await page.setViewportSize({
+      width: 1920,
+      height: 1080,
+    });
+
     const startTime = Date.now();
     console.log(`[BROWSER] Navigating to URL: ${url}`);
 
