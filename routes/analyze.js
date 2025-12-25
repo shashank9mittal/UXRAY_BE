@@ -4,6 +4,7 @@ const router = express.Router();
 // Services
 const browserService = require("../services/browserService");
 const screenshotService = require("../services/screenshotService");
+const interactiveDNAService = require("../services/interactiveDNAService");
 
 // Simple GET endpoint to analyze URL and return screenshot
 router.get("/", async (req, res) => {
@@ -27,6 +28,9 @@ router.get("/", async (req, res) => {
     // Navigate to URL
     const { page, loadTime, statusCode } = await browserService.navigateToUrl(browser, url);
 
+    // Extract Interactive DNA (all interactive elements)
+    const interactiveDNA = await interactiveDNAService.extractInteractiveDNA(page);
+
     // Capture screenshot
     const screenshot = await screenshotService.captureScreenshot(page, url);
 
@@ -37,7 +41,7 @@ router.get("/", async (req, res) => {
     await browserService.closeBrowser(browser);
     browser = null;
 
-    // Send response with screenshot
+    // Send response with screenshot and interactive DNA
     const response = {
       message: "Analysis completed successfully",
       url: url,
@@ -50,6 +54,8 @@ router.get("/", async (req, res) => {
         width: screenshot.width,
         height: screenshot.height,
       },
+      interactiveDNA: interactiveDNA,
+      elementCount: interactiveDNA.length,
       timestamp: new Date().toISOString(),
     };
 
