@@ -143,6 +143,65 @@ class SessionManager {
   }
 
   /**
+   * Capture the current state of a session's browser page
+   * @param {string} userId - The unique identifier for the user
+   * @returns {Promise<Object>} Object containing screenshot and interactive elements
+   */
+  async captureState(userId) {
+    const session = this.getSession(userId);
+    
+    // Validation: Check if session and page exist
+    if (!session) {
+      throw new Error(`Session not found for userId: ${userId}`);
+    }
+    
+    if (!session.page) {
+      throw new Error(`Page not found for userId: ${userId}`);
+    }
+
+    const page = session.page;
+
+    try {
+      // Take screenshot
+      console.log(`[SESSION] Capturing screenshot for user: ${userId}`);
+      const screenshot = await page.screenshot({ encoding: 'base64' });
+
+      // Extract Interactive DNA (DOM Analysis) - focusing on button elements
+      console.log(`[SESSION] Extracting interactive elements for user: ${userId}`);
+      const interactiveElements = await page.evaluate(() => {
+        const buttons = document.querySelectorAll('button');
+        const elements = [];
+
+        buttons.forEach((button, index) => {
+          const rect = button.getBoundingClientRect();
+          elements.push({
+            id: button.id || null,
+            text: button.innerText || button.textContent || '',
+            coordinates: {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            },
+          });
+        });
+
+        return elements;
+      });
+
+      console.log(`[SESSION] Captured ${interactiveElements.length} interactive elements for user: ${userId}`);
+
+      return {
+        screenshot,
+        interactiveElements,
+      };
+    } catch (error) {
+      console.error(`[SESSION] Error capturing state for ${userId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Close a session and clean up browser resources
    * @param {string} userId - The unique identifier for the user
    * @returns {Promise<boolean>} True if session was closed, false if session didn't exist

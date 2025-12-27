@@ -24,6 +24,45 @@ app.use("/", indexRoutes);
 app.use("/analyze", analyzeRoutes);
 app.use("/session", sessionRoutes);
 
+// Debug route for testing captureState
+app.get("/debug/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        error: "userId is required",
+        message: "Please provide a userId in the URL path (e.g., /debug/user1)",
+      });
+    }
+
+    console.log(`[DEBUG] Capturing state for user: ${userId}`);
+
+    // Call captureState
+    const result = await SessionManager.captureState(userId);
+
+    // Set Content-Type and return JSON response
+    res.setHeader("Content-Type", "application/json");
+    res.json(result);
+  } catch (error) {
+    console.error(`[DEBUG] Error capturing state:`, error.message);
+
+    // Handle "Session not found" or "Page not found" errors with 404
+    if (error.message.includes("not found")) {
+      return res.status(404).json({
+        error: "Session not found",
+        message: error.message,
+      });
+    }
+
+    // Other errors return 500
+    res.status(500).json({
+      error: "Internal server error",
+      message: error.message,
+    });
+  }
+});
+
 // Create HTTP server
 const server = http.createServer(app);
 
